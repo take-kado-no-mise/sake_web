@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sake Explorer</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      color: #222;
+    }
+
+    h1 {
+      margin-bottom: 16px;
+    }
+
+    .main-container {
+      display: flex;
+      gap: 30px;
+      align-items: flex-start;
+    }
+
+    .left-panel {
+      flex: 2;
+      min-width: 0;
+    }
+
+    .right-panel {
+      flex: 1;
+      max-width: 360px;
+      min-width: 300px;
+    }
+
+    .controls {
+      width: 420px;
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    #searchInput {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    #dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      border: 1px solid #ccc;
+      border-top: none;
+      background: white;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .dropdown-item {
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+
+    .dropdown-item:hover {
+      background: #f2f2f2;
+    }
+
+    #plot {
+      width: 100%;
+      max-width: 1000px;
+      height: 650px;
+    }
+
+    .hover-card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      background: #fafafa;
+    }
+
+    .hover-card img {
+      width: 100%;
+      max-height: 340px;
+      object-fit: contain;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      background: white;
+      border: 1px solid #eee;
+    }
+
+    .hover-card h2 {
+      margin: 0 0 10px 0;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .info-line {
+      margin: 6px 0;
+      font-size: 15px;
+    }
+
+    .section-label {
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #666;
+    }
+
+    .note-box {
+      margin: 0;
+      padding: 10px 12px;
+      background: white;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sake Explorer</h1>
+
+  <div class="main-container">
+    <div class="left-panel">
+      <div class="controls">
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="Search sake name..."
+          autocomplete="off"
+        />
+        <div id="dropdown"></div>
+      </div>
+
+      <div id="plot"></div>
+    </div>
+
+    <div class="right-panel">
+      <div id="hoverCard" class="hover-card">
+        <img id="hoverImage" src="" alt="" style="display: none;" />
+
+        <h2 id="hoverName">Hover over a sake</h2>
+
+        <p id="hoverStyle" class="info-line"></p>
+        <p id="hoverPrefecture" class="info-line"></p>
+        <p id="hoverGlass" class="info-line"></p>
+        <p id="hoverBottle" class="info-line"></p>
+
+        <div class="section-label">Notes</div>
+        <p id="hoverNotes" class="note-box">—</p>
+
+        <div class="section-label">Tasting Notes</div>
+        <p id="hoverTasting" class="note-box">—</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sakeData = [];
+    let selectedSake = null;
+
+    async function loadData() {
+      const response = await fetch("/api/sake");
+      sakeData = await response.json();
+      drawPlot();
+      setupSearch();
+    }
+
+    function updateHoverCard(sake) {
+      document.getElementById("hoverName").textContent = sake.Sake || "Unknown";
+      document.getElementById("hoverStyle").textContent = `Style: ${sake.Style || "N/A"}`;
+      document.getElementById("hoverPrefecture").textContent = `Prefecture: ${sake.Prefecture || "N/A"}`;
+      document.getElementById("hoverGlass").textContent = `Glass: ${sake.Price_by_gls || "N/A"}`;
+      document.getElementById("hoverBottle").textContent = `Bottle: ${sake.Price_by_btl || "N/A"}`;
+      document.getElementById("hoverNotes").textContent = sake.Notes || "—";
+      document.getElementById("hoverTasting").textContent = sake.Tasting_notes || "—";
+
+      const img = document.getElementById("hoverImage");
+      if (sake.Image) {
+        img.src = sake.Image;
+        img.alt = sake.Sake || "Sake bottle";
+        img.style.display = "block";
+      } else {
+        img.src = "";
+        img.alt = "";
+        img.style.display = "none";
+      }
+    }
+
+    function resetHoverCard() {
+      document.getElementById("hoverName").textContent = "Hover over a sake";
+      document.getElementById("hoverStyle").textContent = "";
+      document.getElementById("hoverPrefecture").textContent = "";
+      document.getElementById("hoverGlass").textContent = "";
+      document.getElementById("hoverBottle").textContent = "";
+      document.getElementById("hoverNotes").textContent = "—";
+      document.getElementById("hoverTasting").textContent = "—";
+
+      const img = document.getElementById("hoverImage");
+      img.src = "";
+      img.alt = "";
+      img.style.display = "none";
+    }
+
+    function drawPlot() {
+      const x = sakeData.map(d => d.x);
+      const y = sakeData.map(d => d.y);
+      const labels = sakeData.map(d => d.Sake);
+
+      const colors = sakeData.map(d =>
+        d.Sake === selectedSake ? "red" : "blue"
+      );
+
+      const sizes = sakeData.map(d =>
+        d.Sake === selectedSake ? 16 : 10
+      );
+
+      const xMin = Math.min(...x);
+      const xMax = Math.max(...x);
+      const yMin = Math.min(...y);
+      const yMax = Math.max(...y);
+
+      const xPadding = (xMax - xMin) * 0.25 || 1.5;
+      const yPadding = (yMax - yMin) * 0.25 || 1.5;
+
+      const trace = {
+        x: x,
+        y: y,
+        text: labels,
+        customdata: sakeData,
+        mode: "markers+text",
+        type: "scatter",
+        textposition: "top center",
+        marker: {
+          color: colors,
+          size: sizes
+        },
+        hoverinfo: "none"
+      };
+
+      const layout = {
+        title: "Sake Similarity Map",
+        xaxis: {
+          title: "Dimension 1",
+          range: [xMin - xPadding, xMax + xPadding],
+          automargin: true
+        },
+        yaxis: {
+          title: "Dimension 2",
+          range: [yMin - yPadding, yMax + yPadding],
+          automargin: true
+        },
+        margin: { t: 60, r: 140, b: 70, l: 70 }
+      };
+
+      const config = {
+        responsive: true,
+        displayModeBar: false,
+        scrollZoom: false
+      };
+
+      Plotly.newPlot("plot", [trace], layout, config);
+
+      const plot = document.getElementById("plot");
+
+      plot.on("plotly_hover", function(eventData) {
+        const pointData = eventData.points[0].customdata;
+        updateHoverCard(pointData);
+      });
+
+      plot.on("plotly_unhover", function() {
+        if (selectedSake) {
+          const selectedData = sakeData.find(d => d.Sake === selectedSake);
+          if (selectedData) {
+            updateHoverCard(selectedData);
+            return;
+          }
+        }
+        resetHoverCard();
+      });
+
+      plot.on("plotly_click", function(eventData) {
+        const pointData = eventData.points[0].customdata;
+        selectedSake = pointData.Sake;
+        drawPlot();
+        updateHoverCard(pointData);
+      });
+    }
+
+    function setupSearch() {
+      const input = document.getElementById("searchInput");
+      const dropdown = document.getElementById("dropdown");
+
+      input.addEventListener("input", () => {
+        const query = input.value.toLowerCase().trim();
+        dropdown.innerHTML = "";
+
+        if (!query) {
+          return;
+        }
+
+        const matches = sakeData.filter(d =>
+          d.Sake.toLowerCase().includes(query)
+        );
+
+        matches.forEach(match => {
+          const item = document.createElement("div");
+          item.className = "dropdown-item";
+          item.textContent = match.Sake;
+
+          item.addEventListener("click", () => {
+            selectedSake = match.Sake;
+            input.value = match.Sake;
+            dropdown.innerHTML = "";
+            drawPlot();
+            updateHoverCard(match);
+          });
+
+          dropdown.appendChild(item);
+        });
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".controls")) {
+          dropdown.innerHTML = "";
+        }
+      });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
