@@ -17,20 +17,21 @@
     }
 
     .main-container {
-        display: flex;
-        gap: 20px; /* slightly tighter */
-        align-items: flex-start;
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
     }
 
     .left-panel {
-        flex: 1.6;
+      flex: 1.6;
+      min-width: 0;
     }
 
     .right-panel {
-        flex: 1.2;
-        max-width: 500px;
-        min-width: 380px;
-        margin-left: -20px;
+      flex: 1.2;
+      max-width: 500px;
+      min-width: 380px;
+      margin-left: -20px;
     }
 
     .controls {
@@ -77,13 +78,13 @@
     .hover-card {
       border: 1px solid #ddd;
       border-radius: 12px;
-      padding: 16px;
+      padding: 20px;
       background: #fafafa;
     }
 
     .hover-card img {
       width: 100%;
-      max-height: 340px;
+      max-height: 420px;
       object-fit: contain;
       margin-bottom: 14px;
       border-radius: 8px;
@@ -121,6 +122,16 @@
       line-height: 1.45;
       white-space: pre-wrap;
     }
+
+    .recommendation-list {
+      margin: 0;
+      padding-left: 18px;
+      line-height: 1.5;
+    }
+
+    .recommendation-list li {
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
@@ -152,6 +163,11 @@
         <p id="hoverGlass" class="info-line"></p>
         <p id="hoverBottle" class="info-line"></p>
 
+        <div class="section-label">Closest Sakes</div>
+        <ol id="hoverRecommendations" class="recommendation-list">
+          <li>—</li>
+        </ol>
+
         <div class="section-label">Notes</div>
         <p id="hoverNotes" class="note-box">—</p>
 
@@ -170,6 +186,50 @@
       sakeData = await response.json();
       drawPlot();
       setupSearch();
+    }
+
+    function getClosestSakes(selected, data, k = 3) {
+      if (!selected) return [];
+
+      const target = data.find(d => d.Sake === selected);
+      if (!target) return [];
+
+      const distances = data
+        .filter(d => d.Sake !== selected)
+        .map(d => {
+          const dx = d.x - target.x;
+          const dy = d.y - target.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          return {
+            name: d.Sake,
+            dist: dist
+          };
+        });
+
+      distances.sort((a, b) => a.dist - b.dist);
+
+      return distances.slice(0, k).map(d => d.name);
+    }
+
+    function updateRecommendations(sakeName) {
+      const list = document.getElementById("hoverRecommendations");
+      list.innerHTML = "";
+
+      const closest = getClosestSakes(sakeName, sakeData, 3);
+
+      if (closest.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "—";
+        list.appendChild(li);
+        return;
+      }
+
+      closest.forEach(name => {
+        const li = document.createElement("li");
+        li.textContent = name;
+        list.appendChild(li);
+      });
     }
 
     function updateHoverCard(sake) {
@@ -191,6 +251,8 @@
         img.alt = "";
         img.style.display = "none";
       }
+
+      updateRecommendations(sake.Sake);
     }
 
     function resetHoverCard() {
@@ -202,6 +264,9 @@
       document.getElementById("hoverNotes").textContent = "—";
       document.getElementById("hoverTasting").textContent = "—";
 
+      const list = document.getElementById("hoverRecommendations");
+      list.innerHTML = "<li>—</li>";
+
       const img = document.getElementById("hoverImage");
       img.src = "";
       img.alt = "";
@@ -212,14 +277,19 @@
       const x = sakeData.map(d => d.x);
       const y = sakeData.map(d => d.y);
       const labels = sakeData.map(d => d.Sake);
+      const closest = getClosestSakes(selectedSake, sakeData, 3);
 
-      const colors = sakeData.map(d =>
-        d.Sake === selectedSake ? "red" : "blue"
-      );
+      const colors = sakeData.map(d => {
+        if (d.Sake === selectedSake) return "red";
+        if (closest.includes(d.Sake)) return "orange";
+        return "blue";
+      });
 
-      const sizes = sakeData.map(d =>
-        d.Sake === selectedSake ? 16 : 10
-      );
+      const sizes = sakeData.map(d => {
+        if (d.Sake === selectedSake) return 18;
+        if (closest.includes(d.Sake)) return 14;
+        return 10;
+      });
 
       const xMin = Math.min(...x);
       const xMax = Math.max(...x);
@@ -269,10 +339,12 @@
 
       const plot = document.getElementById("plot");
 
-      plot.on("plotly_hover", function(eventData) {
-        const pointData = eventData.points[0].customdata;
-        updateHoverCard(pointData);
-      });
+      if (!("ontouchstart" in window)) {
+        plot.on("plotly_hover", function(eventData) {
+          const pointData = eventData.points[0].customdata;
+          updateHoverCard(pointData);
+        });
+      }
 
       plot.on("plotly_unhover", function() {
         if (selectedSake) {
