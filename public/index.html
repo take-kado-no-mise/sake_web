@@ -125,12 +125,31 @@
 
     .recommendation-list {
       margin: 0;
-      padding-left: 18px;
-      line-height: 1.5;
+      padding-left: 0;
+      list-style: none;
     }
 
     .recommendation-list li {
-      margin-bottom: 4px;
+      margin-bottom: 8px;
+    }
+
+    .recommendation-button {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .recommendation-button:hover {
+      background: #f2f2f2;
+    }
+
+    .recommendation-button:active {
+      background: #e9e9e9;
     }
   </style>
 </head>
@@ -164,9 +183,9 @@
         <p id="hoverBottle" class="info-line"></p>
 
         <div class="section-label">Closest Sakes</div>
-        <ol id="hoverRecommendations" class="recommendation-list">
+        <ul id="hoverRecommendations" class="recommendation-list">
           <li>—</li>
-        </ol>
+        </ul>
 
         <div class="section-label">Notes</div>
         <p id="hoverNotes" class="note-box">—</p>
@@ -212,6 +231,17 @@
       return distances.slice(0, k).map(d => d.name);
     }
 
+    function selectSakeByName(sakeName) {
+      const sake = sakeData.find(d => d.Sake === sakeName);
+      if (!sake) return;
+
+      selectedSake = sakeName;
+      document.getElementById("searchInput").value = sakeName;
+      document.getElementById("dropdown").innerHTML = "";
+      drawPlot();
+      updateHoverCard(sake);
+    }
+
     function updateRecommendations(sakeName) {
       const list = document.getElementById("hoverRecommendations");
       list.innerHTML = "";
@@ -227,7 +257,15 @@
 
       closest.forEach(name => {
         const li = document.createElement("li");
-        li.textContent = name;
+
+        const button = document.createElement("button");
+        button.className = "recommendation-button";
+        button.textContent = name;
+        button.addEventListener("click", () => {
+          selectSakeByName(name);
+        });
+
+        li.appendChild(button);
         list.appendChild(li);
       });
     }
@@ -387,11 +425,7 @@
           item.textContent = match.Sake;
 
           item.addEventListener("click", () => {
-            selectedSake = match.Sake;
-            input.value = match.Sake;
-            dropdown.innerHTML = "";
-            drawPlot();
-            updateHoverCard(match);
+            selectSakeByName(match.Sake);
           });
 
           dropdown.appendChild(item);
